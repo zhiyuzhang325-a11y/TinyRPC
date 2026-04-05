@@ -1,8 +1,42 @@
 #include "stub.h"
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 using namespace std;
 
-CalcServiceStub::CalcServiceStub(int fd) : m_fd(fd) {}
+CalcServiceStub::CalcServiceStub() {
+    zhandle_t *zh = zookeeper_init("127.0.0.1:2181", nullptr, 5000, nullptr, nullptr, 0);
+    m_zh = zh;
+
+    string path = "/TinyRPC/CalcService";
+    char buf[64];
+    int buf_len = 64;
+    int ret = zoo_get(zh, path.data(), 0, buf, &buf_len, nullptr);
+    string ip;
+    int port;
+    if (ret == ZOK) {
+        string addr(buf, buf_len);
+        size_t pos = addr.find(':');
+        ip = addr.substr(0, pos);
+        port = stoi(addr.substr(pos + 1, buf_len - pos));
+    } else {
+        cout << "get failed, code: " << ret << endl;
+        return;
+    }
+
+    m_fd = socket(PF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    inet_pton(AF_INET, ip.data(), &addr.sin_addr);
+    connect(m_fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr));
+}
+
+CalcServiceStub::~CalcServiceStub() {
+    zookeeper_close(m_zh);
+    close(m_fd);
+}
 
 AddResponse CalcServiceStub::add(AddRequest req) {
     string request_data;
@@ -24,17 +58,17 @@ SubtractResponse CalcServiceStub::subtract(SubtractRequest req) {
     return resp;
 }
 
-string CalcServiceStub::call(const string &service_name, const string &handler_name, string request_data) {
+string CalcServiceStub::call(const string &service_name, const string &method_name, string request_data) {
     uint32_t service_name_length = service_name.size();
-    uint32_t handler_name_length = handler_name.size();
+    uint32_t method_name_length = method_name.size();
     uint32_t req_length = request_data.size();
 
     string request;
     request.reserve(256);
     request.append(reinterpret_cast<char *>(&service_name_length), 4);
     request.append(service_name);
-    request.append(reinterpret_cast<char *>(&handler_name_length), 4);
-    request.append(handler_name);
+    request.append(reinterpret_cast<char *>(&method_name_length), 4);
+    request.append(method_name);
     request.append(reinterpret_cast<char *>(&req_length), 4);
     request.append(move(request_data));
     send(m_fd, request.data(), request.size(), 0);
@@ -57,7 +91,39 @@ string CalcServiceStub::call(const string &service_name, const string &handler_n
     return response_data;
 }
 
-EchoServiceStub::EchoServiceStub(int fd) : m_fd(fd) {}
+EchoServiceStub::EchoServiceStub() {
+    zhandle_t *zh = zookeeper_init("127.0.0.1:2181", nullptr, 5000, nullptr, nullptr, 0);
+    m_zh = zh;
+
+    string path = "/TinyRPC/EchoService";
+    char buf[64];
+    int buf_len = 64;
+    int ret = zoo_get(zh, path.data(), 0, buf, &buf_len, nullptr);
+    string ip;
+    int port;
+    if (ret == ZOK) {
+        string addr(buf, buf_len);
+        size_t pos = addr.find(':');
+        ip = addr.substr(0, pos);
+        port = stoi(addr.substr(pos + 1, buf_len - pos));
+    } else {
+        cout << "get failed, code: " << ret << endl;
+        return;
+    }
+
+    m_fd = socket(PF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    inet_pton(AF_INET, ip.data(), &addr.sin_addr);
+    connect(m_fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr));
+}
+
+EchoServiceStub::~EchoServiceStub() {
+    zookeeper_close(m_zh);
+    close(m_fd);
+}
 
 EchoResponse EchoServiceStub::echo(EchoRequest req) {
     string request_data;
@@ -69,17 +135,17 @@ EchoResponse EchoServiceStub::echo(EchoRequest req) {
     return resp;
 }
 
-string EchoServiceStub::call(const string &service_name, const string &handler_name, string request_data) {
+string EchoServiceStub::call(const string &service_name, const string &method_name, string request_data) {
     uint32_t service_name_length = service_name.size();
-    uint32_t handler_name_length = handler_name.size();
+    uint32_t method_name_length = method_name.size();
     uint32_t req_length = request_data.size();
 
     string request;
     request.reserve(256);
     request.append(reinterpret_cast<char *>(&service_name_length), 4);
     request.append(service_name);
-    request.append(reinterpret_cast<char *>(&handler_name_length), 4);
-    request.append(handler_name);
+    request.append(reinterpret_cast<char *>(&method_name_length), 4);
+    request.append(method_name);
     request.append(reinterpret_cast<char *>(&req_length), 4);
     request.append(move(request_data));
     send(m_fd, request.data(), request.size(), 0);
