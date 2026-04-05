@@ -8,6 +8,7 @@ using namespace std;
 int main() {
     RpcServer rpc_server;
     CalcServiceImpl calc_impl(&rpc_server);
+    EchoServiceImpl echo_impl(&rpc_server);
     rpc_server.start();
 }
 

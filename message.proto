@@ -12,3 +12,28 @@ message AddResponse {
 service AddService {
     rpc Add(AddRequest) returns (AddResponse);
 }
+
+message SubtractRequest {
+    int32 a = 1;
+    int32 b = 2;
+}
+
+message SubtractResponse {
+    int32 c = 1;
+}
+
+service SubtractService {
+    rpc Subtract(SubtractRequest) returns (SubtractResponse);
+}
+
+message EchoRequest {
+    string msg = 1;
+}
+
+message EchoResponse {
+    string msg = 1;
+}
+
+service EchoService {
+    rpc Echo(EchoRequest) returns (EchoResponse);
+}
