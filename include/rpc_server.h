@@ -2,11 +2,15 @@
 
 #include "status_code.h"
 #include <functional>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <zookeeper/zookeeper.h>
 
 class RpcServer {
+  private:
+    struct Connection;
+
   public:
     RpcServer();
     ~RpcServer();
@@ -18,13 +22,24 @@ class RpcServer {
     }
 
   private:
-    void sendResponse(StatusCode state, std::string response_data = "");
+    void sendResponse(Connection &conn);
+    void addfd(int fd);
+    void modfd(int fd, uint32_t events);
+    void process(Connection &conn);
+    void closeNow(int fd);
 
   private:
-    int m_listenfd;
-    int m_conn_fd;
+    int m_epoll_fd;
+    int m_listen_fd;
     zhandle_t *m_zh;
     std::unordered_map<std::string, std::unordered_map<std::string, std::function<std::string(const std::string &)>>> m_handlers;
-    std::unordered_map<uint32_t, uint32_t> m_type_cast;
     volatile bool m_running = true;
+
+    struct Connection {
+        int fd;
+        StatusCode code;
+        std::string request;
+        std::string response_data;
+    };
+    std::unordered_map<int, std::unique_ptr<Connection>> m_conns;
 };

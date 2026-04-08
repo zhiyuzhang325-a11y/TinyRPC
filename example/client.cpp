@@ -34,4 +34,4 @@ int main() {
     }
 }
 
-// g++ -std=c++23 example/client.cpp build/message.pb.cc src/stub.cpp -o build/client.out -Ibuild -Iinclude -lprotobuf -lzookeeper_mt
+// g++ -std=c++23 example/client.cpp build/message.pb.cc src/stub.cpp src/rpc_conn_pool.cpp -o build/client.out -Ibuild -Iinclude -lprotobuf -lzookeeper_mt
