@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "service_impl.h"
 #include "message.pb.h"
 #include "rpc_server.h"
 using namespace std;
@@ -57,7 +57,7 @@ EchoServiceImpl::EchoServiceImpl(RpcServer *rpc_server) {
 string EchoServiceImpl::echoHandler(const string &request_data) {
     EchoRequest req;
     req.ParseFromString(request_data);
-    string request_msg = request_data;
+    string request_msg = req.msg();
     string response_msg = echo(request_msg);
 
     EchoResponse resp;

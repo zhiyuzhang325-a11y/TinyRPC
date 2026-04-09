@@ -22,9 +22,9 @@ class RpcStub {
     std::string m_key;
 };
 
-class CalcServiceStub : public RpcStub {
+class CalcService_Stub : public RpcStub {
   public:
-    CalcServiceStub() : RpcStub("CalcService") {}
+    CalcService_Stub() : RpcStub("CalcService") {}
     std::future<AddResponse> add(AddRequest req);
     std::future<SubtractResponse> subtract(SubtractRequest req);
 
@@ -32,8 +32,8 @@ class CalcServiceStub : public RpcStub {
     int m_add_fd;
 };
 
-class EchoServiceStub : public RpcStub {
+class EchoService_Stub : public RpcStub {
   public:
-    EchoServiceStub() : RpcStub("EchoService") {}
+    EchoService_Stub() : RpcStub("EchoService") {}
     std::future<EchoResponse> echo(EchoRequest req);
 };

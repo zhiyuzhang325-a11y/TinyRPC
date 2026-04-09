@@ -8,6 +8,7 @@ using namespace std;
 RpcStub::RpcStub(const string &service_name) {
     m_service_name = service_name;
 
+    zoo_set_debug_level(ZOO_LOG_LEVEL_ERROR);
     m_zh = zookeeper_init("127.0.0.1:2181", nullptr, 5000, nullptr, nullptr, 0);
 
     string path;
@@ -69,7 +70,7 @@ string RpcStub::call(const string &method_name, string request_data) {
     return response_data;
 }
 
-future<AddResponse> CalcServiceStub::add(AddRequest req) {
+future<AddResponse> CalcService_Stub::add(AddRequest req) {
     return async(launch::async, [this, req = move(req)] mutable {
         string request_data;
         req.SerializeToString(&request_data);
@@ -81,7 +82,7 @@ future<AddResponse> CalcServiceStub::add(AddRequest req) {
     });
 }
 
-future<SubtractResponse> CalcServiceStub::subtract(SubtractRequest req) {
+future<SubtractResponse> CalcService_Stub::subtract(SubtractRequest req) {
     return async(launch::async, [this, req = move(req)] mutable {
         string request_data;
         req.SerializeToString(&request_data);
@@ -93,7 +94,7 @@ future<SubtractResponse> CalcServiceStub::subtract(SubtractRequest req) {
     });
 }
 
-future<EchoResponse> EchoServiceStub::echo(EchoRequest req) {
+future<EchoResponse> EchoService_Stub::echo(EchoRequest req) {
     return async(launch::async, [this, req = move(req)] mutable {
         string request_data;
         req.SerializeToString(&request_data);

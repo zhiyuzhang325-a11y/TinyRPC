@@ -153,6 +153,7 @@ void RpcServer::registerService(const string &service_name, const string &handle
 }
 
 void RpcServer::registerToZk() {
+    zoo_set_debug_level(ZOO_LOG_LEVEL_ERROR);
     zhandle_t *zh = zookeeper_init("127.0.0.1:2181", nullptr, 5000, nullptr, nullptr, 0);
     if (zh == nullptr) {
         LOG_ERROR("connect failed");

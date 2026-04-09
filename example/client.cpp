@@ -9,7 +9,7 @@ using namespace std;
 
 int main() {
     {
-        CalcServiceStub calc_stub;
+        CalcService_Stub calc_stub;
         AddRequest add_req;
         int a = 1, b = 2;
         add_req.set_a(a);
@@ -25,7 +25,7 @@ int main() {
     }
 
     {
-        EchoServiceStub echo_stub;
+        EchoService_Stub echo_stub;
         EchoRequest echo_req;
         string req_msg = "echo success";
         echo_req.set_msg(req_msg);
