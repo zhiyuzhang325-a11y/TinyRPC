@@ -1,104 +1,173 @@
 # TinyRPC
 
-C++ 轻量级 RPC 框架，从零实现远程过程调用，支持服务注册发现、异步调用、连接池复用。
+从零实现的轻量级 C++ RPC 框架，基于自定义二进制协议、多 Reactor 架构和 ZooKeeper 服务发现。
 
-## 架构
+## 架构概览
+
 ```
-  ┌───────────────────────┐            ┌───────────────────────┐
-  │       Client          │            │       Server          │
-  │                       │            │                       │
-  │  CalcService_Stub     │            │  ┌─────────────────┐  │
-  │    add() ──┐          │            │  │   RpcServer      │  │
-  │    sub() ──┤          │            │  │   epoll ET       │  │
-  │            ▼          │            │  │   accept + recv  │  │
-  │  RpcStub (base)       │            │  │   process        │  │
-  │    call() ────────────┼──TCP/IP──→ │  │   sendResponse   │  │
-  │    future + async     │            │  └────────┬──────┬──┘  │
-  │            │          │            │           │      │     │
-  │  RpcConnPool          │            │  handler map     │     │
-  │    getConn()          │            │  (2-level umap)  │     │
-  │    ConnGuard RAII     │            │           │      │     │
-  └───────┬───────────────┘            │  CalcServiceImpl │     │
-          │                            │  EchoServiceImpl │     │
-          │                            └──────────────────┼─────┘
-          │         ┌──────────────┐                      │
-          └────────→│  ZooKeeper   │←─────────────────────┘
-           zoo_get  │  /TinyRPC/   │  zoo_create
-                    │  服务注册发现 │
-                    └──────────────┘
+┌───────────────────────────┐              ┌──────────────────────────────────────┐
+  │         Client            │              │              Server                  │
+  │                           │              │                                      │
+  │  CalcService_Stub         │              │  ┌────────────────────────────────┐  │
+  │    add() ──┐  async       │              │  │   MainReactor (RpcServer)      │  │
+  │    sub() ──┤              │              │  │   listen / accept              │  │
+  │            ▼              │              │  │   round-robin 分发 conn_fd     │  │
+  │  RpcStub::call()          │              │  └─────┬──────┬──────┬───────────┘  │
+  │    atomic round-robin ────┼───TCP/IP───→ │  eventfd+queue │      │              │
+  │                           │              │        ▼       ▼      ▼              │
+  │  RpcConnPool              │              │  ┌─────────────────────────────┐     │
+  │    PoolEntry (per ip:port)│              │  │  SubReactor × N (epoll ET)  │     │
+  │    ConnGuard RAII 归还     │              │  │  粘包处理 + 协议解析          │     │
+  │    健康检查 (MSG_PEEK)     │              │  └─────────────┬───────────────┘     │
+  │    最大连接数 + cond_var   │              │        enqueue │                     │
+  │                           │              │                ▼                     │
+  └─────────┬─────────────────┘              │  ┌─────────────────────────────┐     │
+            │                                │  │  ThreadPool (worker × M)    │     │
+            │                                │  │  handler 执行 → ready_queue │     │
+            │                                │  └─────────────┬───────────────┘     │
+            │                                │        eventfd │ 通知                │
+            │                                │                ▼                     │
+            │                                │  SubReactor 取结果 → sendResponse    │
+            │                                │                                      │
+            │                                │  shared_ptr<const HandlerMap>        │
+            │                                │  守护进程 · 优雅关闭 · 异步日志        │
+            │                                └──────────────────┬───────────────────┘
+            │                                                   │
+            │         ┌───────────────────────────┐             │
+            └────────→│        ZooKeeper          │←────────────┘
+       zoo_get_children│  /TinyRPC/               │ zoo_create (EPHEMERAL|SEQUENCE)
+                       │    /CalcService/         │
+                       │      node000001 → ip:port│
+                       │      node000002 → ip:port│
+                       └───────────────────────────┘
 ```
 
-## 设计说明
+## 核心特性
 
-自定义协议：请求格式为 `service_name_len | service_name | method_name_len | method_name | args_len | args`，响应格式为 `status_code | data_len | data`，使用字符串标识服务和方法，避免枚举编号冲突，扩展性好。
+### 自定义二进制协议
 
-服务分发：两层嵌套 `unordered_map<string, unordered_map<string, function<string(const string&)>>>`，外层按 service_name 查找，内层按 method_name 查找，O(1) 分发。
+请求格式：
 
-Stub 封装：`RpcStub` 基类处理 ZooKeeper 查询、连接管理、协议收发，子类（如 `CalcService_Stub`）只需实现业务方法。调用方一行代码即可发起远程调用。
+```
+┌───────────┬─────────────┬──────────────┬──────────┬─────────────┬────────┬──────────┬──────┐
+│ magic (4) │ total_len(4)│svc_name_len(4)│ svc_name │method_len(4)│ method │args_len(4)│ args │
+└───────────┴─────────────┴──────────────┴──────────┴─────────────┴────────┴──────────┴──────┘
+```
 
-异步调用：每个业务方法通过 `std::async + std::future` 实现异步，调用方可选择立即 `.get()` 同步等待，或先做其他事后续取结果。
+响应格式：
 
-ZooKeeper 服务发现：服务端启动时将 service_name 和地址注册到 ZooKeeper（路径 `/TinyRPC/ServiceName`），客户端 Stub 构造时从 ZooKeeper 查询地址，无需硬编码。
+```
+┌────────────────┬──────────────┬──────┐
+│ status_code (4)│ data_len (4) │ data │
+└────────────────┴──────────────┴──────┘
+```
 
-连接池：`RpcConnPool` 按地址管理连接，懒加载创建，`ConnGuard` RAII 自动归还。不同 Stub 共享同一连接池，同地址服务复用连接。锁只保护队列操作，connect 在锁外执行避免阻塞。
+- **魔数 (0x54525043 = "TRPC")**：标识协议边界，用于错位数据检测与重新对齐
+- **总长度字段**：快速判断消息完整性，无需逐段解析
+- **Protobuf 序列化**：业务数据使用 Protocol Buffers 编解码
 
-epoll ET 服务端：非阻塞 socket + epoll 边缘触发，支持多客户端并发连接。
+### 多 Reactor + 线程池
 
-错误处理：`StatusCode` 枚举区分 OK、NOT_FOUND_SERVICE、NOT_FOUND_HANDLERINVAILD_REQUEST、INTERNAL_ERROR，客户端根据状态码处理异常。recv 设置 `SO_RCVTIMEO` 超时保护。
+- **MainReactor**：单线程负责 `accept`，通过轮询将新连接分发给 SubReactor
+- **SubReactor × N**：每个 SubReactor 独立线程运行 epoll ET 事件循环，管理各自的连接集合
+- **连接分发**：MainReactor 通过 `eventfd` + 队列将 `conn_fd` 传递给 SubReactor，无锁竞争
+- **异步业务处理**：SubReactor 将 handler 执行任务提交给线程池，工作线程完成后通过 `eventfd` 通知 SubReactor 发送响应
 
-Protobuf 序列化：请求和响应的 args 部分使用 protobuf 序列化，高效紧凑。
+### 粘包 / 半包处理
 
-## 目录结构
+- **完整性检查函数**：纯函数设计，通过 `magic + total_len` 判断消息是否完整，返回消息字节数（完整）、0（不完整）或 -1（数据错位）
+- **循环处理**：`while (checkComplete(...))` 循环，一次 `recv` 可能包含多条完整消息，逐条处理
+- **错位恢复**：检测到非法魔数时，扫描 buffer 找到下一个合法魔数位置，丢弃脏数据重新对齐
+
+### 服务发现 (ZooKeeper)
+
+- **临时顺序节点**：每个 Server 进程启动时在 `/TinyRPC/<ServiceName>/` 下创建 `ZOO_EPHEMERAL | ZOO_SEQUENCE` 节点，进程退出后节点自动删除
+- **多机注册**：不同 Server 注册不同的 `ip:port`，客户端通过 `zoo_get_children` 获取全部 provider 地址
+
+### 客户端
+
+- **RpcStub 基类**：封装协议编码、服务发现、负载均衡、连接管理，业务 Stub 只需继承并实现具体方法
+- **异步调用**：每个 RPC 方法通过 `std::async` 在独立线程中执行，返回 `std::future`，调用方可并行发起多个请求
+- **Round-Robin 负载均衡**：`atomic<int>` 索引 + `fetch_add` 无锁轮询，随机初始偏移避免多 Stub 实例集中访问同一 provider
+- **连接池 (RpcConnPool)**：
+  - 按 `ip:port` 分组管理 TCP 连接，RAII 的 `ConnGuard` 自动归还
+  - 懒加载：首次调用时建立连接
+  - 健康检查：取出连接时通过 `recv(MSG_PEEK | MSG_DONTWAIT)` 检测连接存活，死连接自动关闭
+  - 最大连接数限制：每个 provider 限制最大连接数，超限时 `condition_variable` 等待归还
+  - 故障标记：`ConnGuard::markBroken()` 标记坏连接，析构时关闭并减少计数，不归还池中
+
+### 服务端可靠性
+
+- **守护进程**：`fork` 模式，子进程异常退出（信号终止）时自动重启，正常退出时停止
+- **优雅关闭**：`SIGINT/SIGTERM` → 设置停止标志 → `eventfd` 唤醒各 SubReactor → 线程 join → 资源清理
+- **异步日志 (AsyncLogger)**：前后台双 buffer 交换，后台线程批量写盘，支持 `fork` 后通过 `pthread_atfork` 重置
+
+## 项目结构
+
 ```
 TinyRPC/
-├── src/                  # 框架源文件
-│   ├── rpc_server.cpp    # RPC 服务端（epoll + 分发）
-│   ├── stub.cpp          # RPC 客户端 Stub 基类 + 子类
-│   ├── rpc_conn_pool.cpp # 连接池 + ConnGuard
-│   ├── service_impl.cpp  # 服务实现（CalcService、EchoService）
-│   └── logger.cpp        # 异步日志
-├── include/              # 头文件
-├── example/              # 示例（server/client 启动入口）
-├── build/                # 编译输出 + protobuf 生成文件
-├── logs/                 # 运行日志
-├── message.proto         # protobuf 定义
+├── include/                # 头文件
+│   ├── rpc_server.h        # MainReactor
+│   ├── sub_reactor.h       # SubReactor
+│   ├── thread_pool.h       # 线程池
+│   ├── task.h              # 异步任务
+│   ├── stub.h              # 客户端 Stub 基类及业务 Stub
+│   ├── rpc_conn_pool.h     # 连接池 + ConnGuard
+│   ├── service_impl.h      # 业务实现
+│   ├── status_code.h       # 状态码 + 魔数 + HandlerMap 类型
+│   └── logger.h            # 异步日志
+├── src/                    # 实现
+│   ├── rpc_server.cpp
+│   ├── sub_reactor.cpp
+│   ├── thread_pool.cpp
+│   ├── task.cpp
+│   ├── stub.cpp
+│   ├── rpc_conn_pool.cpp
+│   ├── service_impl.cpp
+│   └── logger.cpp
+├── example/                # 示例
+│   ├── server.cpp          # 服务端入口（守护进程 + 信号处理）
+│   └── client.cpp          # 客户端入口（异步调用示例）
+├── message.proto           # Protobuf 消息定义
 ├── Makefile
-└── README.md
+└── build/                  # 编译输出
 ```
+
+## 依赖
+
+- **C++23**
+- **Protocol Buffers** (libprotobuf)
+- **ZooKeeper C Client** (libzookeeper_mt)
+- **pthread**
 
 ## 编译与运行
+
 ```bash
-# 启动 ZooKeeper
-sudo systemctl start zookeeper
-
 # 编译
-make
+make all
 
-# 启动服务端
+# 启动 ZooKeeper（需提前安装并运行）
+# 默认连接 127.0.0.1:2181
+
+# 启动 Server（默认 127.0.0.1:9090）
 ./build/server.out
 
-# 启动客户端（另一个终端）
-./build/client.out
+# 指定 IP 和端口（多机 / 多实例部署）
+./build/server.out 127.0.0.1 9091
+./build/server.out 127.0.0.1 9092
 
-# 清理
-make clean
+# 运行 Client
+./build/client.out
 ```
 
-## 测试
-```bash
-# 客户端输出示例
+## 示例输出
+
+```
+# Server 端
+server start
+
+# Client 端
 1 + 2 = 3
 2 - 1 = 1
 echo success
-```
-
-## 环境
-- Ubuntu 22.04
-- g++ 11.4.0
-- protobuf 3.12.4
-- ZooKeeper 3.4.13
-
-## 依赖安装
-```bash
-sudo apt install g++ protobuf-compiler libprotobuf-dev zookeeperd libzookeeper-mt-dev
 ```

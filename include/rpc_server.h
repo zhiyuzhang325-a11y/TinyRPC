@@ -1,11 +1,14 @@
 #pragma once
 
-#include "rpc_type.h"
 #include "service_impl.h"
 #include <functional>
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include <vector>
 #include <zookeeper/zookeeper.h>
+
+using HandlerMap = std::unordered_map<std::string, std::unordered_map<std::string, std::function<std::string(const std::string &)>>>;
 
 class SubReactor;
 

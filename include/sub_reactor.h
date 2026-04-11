@@ -1,6 +1,5 @@
 #pragma once
 
-#include "rpc_type.h"
 #include "status_code.h"
 #include "thread_pool.h"
 #include <functional>
@@ -10,6 +9,8 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+
+using HandlerMap = std::unordered_map<std::string, std::unordered_map<std::string, std::function<std::string(const std::string &)>>>;
 
 class SubReactor {
   private:
