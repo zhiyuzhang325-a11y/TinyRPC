@@ -2,6 +2,7 @@
 #include "rpc_conn_pool.h"
 #include "status_code.h"
 #include <arpa/inet.h>
+#include <ctime>
 #include <netinet/in.h>
 #include <sys/socket.h>
 using namespace std;
@@ -10,28 +11,44 @@ RpcStub::RpcStub(const string &service_name) {
     m_service_name = service_name;
 
     zoo_set_debug_level(ZOO_LOG_LEVEL_ERROR);
-    m_zh = zookeeper_init("127.0.0.1:2181", nullptr, 5000, nullptr, nullptr, 0);
+    zhandle_t *zh = zookeeper_init("127.0.0.1:2181", nullptr, 5000, nullptr, nullptr, 0);
 
     string path;
     path.reserve(16);
     path += "/TinyRPC/";
     path += service_name;
-    char buf[64];
-    int buf_len = 64;
-    int ret = zoo_get(m_zh, path.data(), 0, buf, &buf_len, nullptr);
-    if (ret == ZOK) {
-        m_key.append(buf, buf_len);
-    } else {
-        cout << "get failed, code: " << ret << endl;
+    String_vector children;
+    int ret = zoo_get_children(zh, path.data(), 0, &children);
+    if (ret != ZOK) {
+        cout << "get_children failed, code: " << ret << endl;
         return;
     }
-}
 
-RpcStub::~RpcStub() {
-    zookeeper_close(m_zh);
+    for (int i = 0; i < children.count; i++) {
+        string children_path = path + '/' + children.data[i];
+        char buf[64];
+        int buf_len = 64;
+        int ret = zoo_get(zh, children_path.data(), 0, buf, &buf_len, nullptr);
+        if (ret == ZOK) {
+            m_keys.emplace_back(buf, buf_len);
+        } else {
+            cout << "get failed, code: " << ret << endl;
+            return;
+        }
+    }
+    deallocate_String_vector(&children);
+    zookeeper_close(zh);
+
+    srand(time(nullptr));
+    m_next_key_idx = rand() % m_keys.size();
 }
 
 string RpcStub::call(const string &method_name, string request_data) {
+    if (m_keys.empty()) {
+        cout << "keys empty, can't get fd" << endl;
+        return "";
+    }
+
     uint32_t service_name_length = m_service_name.size();
     uint32_t method_name_length = method_name.size();
     uint32_t req_length = request_data.size();
@@ -50,13 +67,24 @@ string RpcStub::call(const string &method_name, string request_data) {
 
     string response;
     {
-        ConnGuard conn_guard = conn_pool.getConnGuard(m_key);
+        size_t idx = m_next_key_idx.fetch_add(1) % m_keys.size();
+        cout << "idx=" << idx << " key=" << m_keys[idx] << endl;
+        ConnGuard conn_guard = conn_pool.getConnGuard(m_keys[idx]);
+
         int fd = conn_guard.getConnFd();
-        send(fd, request.data(), request.size(), 0);
+        int ret = send(fd, request.data(), request.size(), 0);
+        if (ret <= 0) {
+            conn_guard.markBroken();
+            return "";
+        }
 
         char buf[256];
         int n = recv(fd, buf, sizeof(buf), 0);
         response.append(buf, n);
+        if (n <= 0) {
+            conn_guard.markBroken();
+            return "";
+        }
     }
 
     StatusCode resp_state_code;

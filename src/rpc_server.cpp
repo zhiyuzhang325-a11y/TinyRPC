@@ -7,7 +7,7 @@
 #include <sys/epoll.h>
 using namespace std;
 
-RpcServer::RpcServer(int n) : m_num_reactors(n), m_calc_impl(), m_echo_impl() {
+RpcServer::RpcServer(const string &ip, int port, int n) : m_num_reactors(n), m_addr(ip + ':' + to_string(port)), m_calc_impl(), m_echo_impl() {
     m_calc_impl.registerService(this);
     m_echo_impl.registerService(this);
     registerToZk();
@@ -16,9 +16,6 @@ RpcServer::RpcServer(int n) : m_num_reactors(n), m_calc_impl(), m_echo_impl() {
         m_sub_reactors.emplace_back(make_unique<SubReactor>(i, m_handlers));
         m_sub_reactors[i]->start();
     }
-
-    string ip = "127.0.0.1";
-    int port = 9090;
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -40,6 +37,7 @@ RpcServer::~RpcServer() {
         reactor->stop();
     }
 
+    zookeeper_close(m_zh);
     close(m_listen_fd);
     close(m_epoll_fd);
 }
@@ -70,23 +68,19 @@ void RpcServer::registerToZk() {
         path += "/TinyRPC";
         path += '/';
         path += it1->first;
-        string addr = "127.0.0.1:9090";
-        int ret = zoo_create(zh, path.data(), addr.data(), addr.size(), &ZOO_OPEN_ACL_UNSAFE, 0, path_buffer, sizeof(path_buffer));
+        int ret = zoo_create(zh, path.data(), m_addr.data(), m_addr.size(), &ZOO_OPEN_ACL_UNSAFE, 0, path_buffer, sizeof(path_buffer));
         if (ret == ZOK) {
             LOG_DEBUG("create: " + string(path_buffer));
         } else {
             LOG_ERROR("create failed or already exists, code: " + to_string(ret));
         }
-        for (auto it2 = it1->second.begin(); it2 != it1->second.end(); it2++) {
-            string handler_path = path;
-            handler_path += '/';
-            handler_path += it2->first;
-            int ret = zoo_create(zh, handler_path.data(), addr.data(), addr.size(), &ZOO_OPEN_ACL_UNSAFE, 0, path_buffer, sizeof(path_buffer));
-            if (ret == ZOK) {
-                LOG_DEBUG("create: " + string(path_buffer));
-            } else {
-                LOG_ERROR("create failed or already exists, code: " + to_string(ret));
-            }
+
+        path += "/node";
+        ret = zoo_create(zh, path.data(), m_addr.data(), m_addr.size(), &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL | ZOO_SEQUENCE, path_buffer, sizeof(path_buffer));
+        if (ret == ZOK) {
+            LOG_DEBUG("create: " + string(path_buffer));
+        } else {
+            LOG_ERROR("create failed or already exists, code: " + to_string(ret));
         }
     }
 }

@@ -15,7 +15,7 @@ void handleSignal(int sig) {
     }
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     signal(SIGINT, SIG_IGN);
     signal(SIGTERM, SIG_IGN);
 
@@ -60,7 +60,14 @@ int main() {
             signal(SIGINT, handleSignal);
             signal(SIGTERM, handleSignal);
 
-            RpcServer rpc_server;
+            string ip = "127.0.0.1";
+            int port = 9090;
+            if (argc > 2) {
+                ip = argv[1];
+                port = stoi(argv[2]);
+            }
+            cout << "RpcServer ip is " + ip + '/' << port << endl;
+            RpcServer rpc_server(ip, port);
             g_server = &rpc_server;
             rpc_server.start();
 

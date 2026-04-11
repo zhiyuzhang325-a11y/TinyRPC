@@ -8,7 +8,6 @@
 using namespace std;
 
 int main() {
-    {
         CalcService_Stub calc_stub;
         AddRequest add_req;
         int a = 1, b = 2;
@@ -22,16 +21,11 @@ int main() {
         auto sub_resp = calc_stub.subtract(sub_req);
         cout << a << " + " << b << " = " << add_resp.get().c() << endl;
         cout << b << " - " << a << " = " << sub_resp.get().c() << endl;
-    }
 
-    {
         EchoService_Stub echo_stub;
         EchoRequest echo_req;
         string req_msg = "echo success";
         echo_req.set_msg(req_msg);
         auto echo_resp = echo_stub.echo(echo_req);
         cout << echo_resp.get().msg() << endl;
-    }
 }
-
-// g++ -std=c++23 example/client.cpp build/message.pb.cc src/stub.cpp src/rpc_conn_pool.cpp -o build/client.out -Ibuild -Iinclude -lprotobuf -lzookeeper_mt

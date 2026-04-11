@@ -11,10 +11,10 @@ RpcConnPool::RpcConnPool() {}
 
 RpcConnPool::~RpcConnPool() {
     for (auto it = m_pool.begin(); it != m_pool.end(); it++) {
-        auto &fd_queue = it->second;
-        while (!fd_queue->empty()) {
-            close(fd_queue->front());
-            fd_queue->pop();
+        auto &[fds, n] = it->second;
+        while (!fds.empty()) {
+            close(fds.front());
+            fds.pop();
         }
     }
 }
@@ -28,17 +28,40 @@ ConnGuard RpcConnPool::getConnGuard(const string &key) {
     int port = stoi(string(key.substr(pos + 1, key.size() - pos)));
 
     int fd = 0;
-    queue<int> *ptr = nullptr;
     {
-        lock_guard<mutex> lock(m_mutex);
+        unique_lock<mutex> lock(m_mutex);
         if (!m_pool.contains(key)) {
-            m_pool.emplace(key, make_unique<queue<int>>());
+            m_pool.emplace(key, PoolEntry{queue<int>{}, 0});
         }
-        ptr = m_pool[key].get();
+        PoolEntry &entry = m_pool[key];
 
-        if (!m_pool[key]->empty()) {
-            fd = m_pool[key]->front();
-            m_pool[key]->pop();
+        while (!entry.fds.empty()) {
+            fd = entry.fds.front();
+            entry.fds.pop();
+
+            char c;
+            int ret = recv(fd, &c, 1, MSG_PEEK | MSG_DONTWAIT);
+            if (ret == 0 || (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+                close(fd);
+                fd = 0;
+                entry.total_counts--;
+            } else {
+                break;
+            }
+        }
+
+        if (fd == 0) {
+            m_cond.wait(lock, [&fd, &entry, this] {
+                if (entry.total_counts < m_max_conns_per_entry) {
+                    entry.total_counts++;
+                    return true;
+                } else if (!entry.fds.empty()) {
+                    fd = entry.fds.front();
+                    entry.fds.pop();
+                    return true;
+                }
+                return false;
+            });
         }
     }
 
@@ -56,12 +79,22 @@ ConnGuard RpcConnPool::getConnGuard(const string &key) {
         inet_pton(AF_INET, ip.data(), &addr.sin_addr);
         connect(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr));
     }
-    return ConnGuard(*this, ptr, fd);
+    return ConnGuard(*this, key, fd);
 }
 
 ConnGuard::~ConnGuard() {
-    if (m_fd > 0 && m_queue_ptr != nullptr) {
+    if (m_fd != 0 && !m_key.empty()) {
         lock_guard<mutex> lock(m_conn_pool.m_mutex);
-        m_queue_ptr->emplace(m_fd);
+        if (m_fd > 0) {
+            m_conn_pool.m_pool[m_key].fds.emplace(m_fd);
+        } else {
+            m_conn_pool.m_pool[m_key].total_counts--;
+        }
+        m_conn_pool.m_cond.notify_one();
     }
+}
+
+void ConnGuard::markBroken() {
+    close(m_fd);
+    m_fd = -1;
 }
