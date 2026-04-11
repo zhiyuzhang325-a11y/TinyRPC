@@ -4,6 +4,10 @@
 using namespace std;
 
 CalcServiceImpl::CalcServiceImpl(RpcServer *rpc_server) {
+    registerService(rpc_server);
+}
+
+void CalcServiceImpl::registerService(RpcServer *rpc_server) {
     rpc_server->registerService("CalcService", "Add", [this](const string &request_data) {
         return this->addHandler(request_data);
     });
@@ -49,6 +53,10 @@ int CalcServiceImpl::subtract(int a, int b) {
 }
 
 EchoServiceImpl::EchoServiceImpl(RpcServer *rpc_server) {
+    registerService(rpc_server);
+}
+
+void EchoServiceImpl::registerService(RpcServer *rpc_server) {
     rpc_server->registerService("EchoService", "Echo", [this](const string &request_data) {
         return this->echoHandler(request_data);
     });

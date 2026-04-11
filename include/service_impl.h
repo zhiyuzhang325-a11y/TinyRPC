@@ -6,7 +6,9 @@ class RpcServer;
 
 class CalcServiceImpl {
   public:
+    CalcServiceImpl() {};
     CalcServiceImpl(RpcServer *rpc_server);
+    void registerService(RpcServer *rpc_server);
     std::string addHandler(const std::string &request_data);
     std::string subtractHandler(const std::string &request_data);
 
@@ -19,7 +21,9 @@ class CalcServiceImpl {
 
 class EchoServiceImpl {
   public:
+    EchoServiceImpl() {};
     EchoServiceImpl(RpcServer *rpc_server);
+    void registerService(RpcServer *rpc_server);
     std::string echoHandler(const std::string &request);
 
   private:

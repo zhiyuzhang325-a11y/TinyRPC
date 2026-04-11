@@ -1,7 +1,6 @@
 #pragma once
 
 #include "message.pb.h"
-#include "status_code.h"
 #include <arpa/inet.h>
 #include <future>
 #include <string>
@@ -27,9 +26,6 @@ class CalcService_Stub : public RpcStub {
     CalcService_Stub() : RpcStub("CalcService") {}
     std::future<AddResponse> add(AddRequest req);
     std::future<SubtractResponse> subtract(SubtractRequest req);
-
-  private:
-    int m_add_fd;
 };
 
 class EchoService_Stub : public RpcStub {

@@ -1,45 +1,34 @@
 #pragma once
 
-#include "status_code.h"
+#include "rpc_type.h"
+#include "service_impl.h"
 #include <functional>
 #include <memory>
-#include <string>
-#include <unordered_map>
+#include <vector>
 #include <zookeeper/zookeeper.h>
 
-class RpcServer {
-  private:
-    struct Connection;
+class SubReactor;
 
+class RpcServer {
   public:
-    RpcServer();
+    RpcServer(int n = 5);
     ~RpcServer();
-    void start();
     void registerService(const std::string &service_name, const std::string &handler_name, const std::function<std::string(const std::string &)> &handler);
     void registerToZk();
-    void stop() {
-        m_running = false;
-    }
+    void start();
+    void shutDown();
 
   private:
-    void sendResponse(Connection &conn);
     void addfd(int fd);
-    void modfd(int fd, uint32_t events);
-    void process(Connection &conn);
-    void closeNow(int fd);
 
   private:
-    int m_epoll_fd;
     int m_listen_fd;
-    zhandle_t *m_zh;
-    std::unordered_map<std::string, std::unordered_map<std::string, std::function<std::string(const std::string &)>>> m_handlers;
+    int m_epoll_fd;
+    const int m_num_reactors;
     volatile bool m_running = true;
-
-    struct Connection {
-        int fd;
-        StatusCode code;
-        std::string request;
-        std::string response_data;
-    };
-    std::unordered_map<int, std::unique_ptr<Connection>> m_conns;
+    zhandle_t *m_zh;
+    std::shared_ptr<HandlerMap> m_handlers = std::make_shared<HandlerMap>();
+    std::vector<std::unique_ptr<SubReactor>> m_sub_reactors;
+    CalcServiceImpl m_calc_impl;
+    EchoServiceImpl m_echo_impl;
 };

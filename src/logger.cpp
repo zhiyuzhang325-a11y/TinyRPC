@@ -84,6 +84,9 @@ void AsyncLogger::log(LOGLEVEL level, string_view message) {
 void AsyncLogger::setFilePath(const string file_path) {
     m_file.close();
     m_file.open(file_path, ios::app);
+    if (!m_file.is_open()) {
+        std::cerr << "log file open failed!" << std::endl;
+    }
 }
 
 void AsyncLogger::setLevel(string_view min_level) {

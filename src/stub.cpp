@@ -1,5 +1,6 @@
 #include "stub.h"
 #include "rpc_conn_pool.h"
+#include "status_code.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -31,23 +32,26 @@ RpcStub::~RpcStub() {
 }
 
 string RpcStub::call(const string &method_name, string request_data) {
+    uint32_t service_name_length = m_service_name.size();
+    uint32_t method_name_length = method_name.size();
+    uint32_t req_length = request_data.size();
+    uint32_t total_length = 12 + service_name_length + method_name_length + req_length;
+
+    string request;
+    request.reserve(256);
+    request.append(reinterpret_cast<const char *>(&MAGIC_NUMBER), 4);
+    request.append(reinterpret_cast<char *>(&total_length), 4);
+    request.append(reinterpret_cast<char *>(&service_name_length), 4);
+    request.append(m_service_name);
+    request.append(reinterpret_cast<char *>(&method_name_length), 4);
+    request.append(method_name);
+    request.append(reinterpret_cast<char *>(&req_length), 4);
+    request.append(move(request_data));
+
     string response;
     {
         ConnGuard conn_guard = conn_pool.getConnGuard(m_key);
         int fd = conn_guard.getConnFd();
-
-        uint32_t service_name_length = m_service_name.size();
-        uint32_t method_name_length = method_name.size();
-        uint32_t req_length = request_data.size();
-
-        string request;
-        request.reserve(256);
-        request.append(reinterpret_cast<char *>(&service_name_length), 4);
-        request.append(m_service_name);
-        request.append(reinterpret_cast<char *>(&method_name_length), 4);
-        request.append(method_name);
-        request.append(reinterpret_cast<char *>(&req_length), 4);
-        request.append(move(request_data));
         send(fd, request.data(), request.size(), 0);
 
         char buf[256];
@@ -62,6 +66,9 @@ string RpcStub::call(const string &method_name, string request_data) {
         return "";
     } else if (resp_state_code == NOT_FOUND_HANDLER) {
         cout << "not found handler" << endl;
+        return "";
+    } else if (resp_state_code == INVAILD_REQUEST) {
+        cout << "invaild request" << endl;
         return "";
     }
     uint32_t resp_length;
