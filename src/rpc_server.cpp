@@ -5,15 +5,16 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/epoll.h>
+#include <unistd.h>
 using namespace std;
 
-RpcServer::RpcServer(const string &ip, int port, int n) : m_num_reactors(n), m_addr(ip + ':' + to_string(port)), m_calc_impl(), m_echo_impl() {
+RpcServer::RpcServer(const string &ip, int port, int n, int workers) : m_num_reactors(n), m_addr(ip + ':' + to_string(port)), m_calc_impl(), m_echo_impl() {
     m_calc_impl.registerService(this);
     m_echo_impl.registerService(this);
     registerToZk();
 
     for (int i = 0; i < m_num_reactors; i++) {
-        m_sub_reactors.emplace_back(make_unique<SubReactor>(i, m_handlers));
+        m_sub_reactors.emplace_back(make_unique<SubReactor>(i, m_handlers, workers));
         m_sub_reactors[i]->start();
     }
 

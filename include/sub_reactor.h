@@ -17,7 +17,7 @@ class SubReactor {
     struct Connection;
 
   public:
-    SubReactor(int i, std::shared_ptr<const HandlerMap> handlers);
+    SubReactor(int i, std::shared_ptr<const HandlerMap> handlers, int workers = 4);
     ~SubReactor();
     void start();
     void stop() {
@@ -53,6 +53,8 @@ class SubReactor {
         StatusCode code;
         std::string request;
         std::string response_data;
+
+        Connection(int f) : fd(f) {}
     };
     std::unordered_map<int, std::unique_ptr<Connection>> m_conns;
 };

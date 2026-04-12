@@ -16,7 +16,7 @@ server:
 	$(CXX) $(CXXFLAGS) $(SERVER_SRC) -o build/server.out $(LIBS)
 
 client:
-	$(CXX) -std=c++23 $(filter-out -std=c++20,$(CXXFLAGS)) $(CLIENT_SRC) -o build/client.out $(LIBS)
+	$(CXX) $(CXXFLAGS) $(CLIENT_SRC) -o build/client.out $(LIBS)
 
 clean:
 	rm -f build/*.out

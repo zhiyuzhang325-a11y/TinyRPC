@@ -14,7 +14,7 @@ class SubReactor;
 
 class RpcServer {
   public:
-    RpcServer(const std::string &ip = "127.0.0.1", int port = 9090, int n = 5);
+    RpcServer(const std::string &ip = "127.0.0.1", int port = 9090, int n = 4, int workers = 4);
     ~RpcServer();
     void registerService(const std::string &service_name, const std::string &handler_name, const std::function<std::string(const std::string &)> &handler);
     void registerToZk();

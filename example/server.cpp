@@ -19,7 +19,7 @@ int main(int argc, char *argv[]) {
     signal(SIGINT, SIG_IGN);
     signal(SIGTERM, SIG_IGN);
 
-    AsyncLogger::setLevel(AsyncLogger::DEBUG);
+    AsyncLogger::setLevel(AsyncLogger::ERROR);
 
     while (true) {
         pid_t pid = fork();
@@ -67,6 +67,9 @@ int main(int argc, char *argv[]) {
                 port = stoi(argv[2]);
             }
             cout << "RpcServer ip is " + ip + '/' << port << endl;
+            int sub_n = stoi(argv[3]);
+            int worker_n = stoi(argv[4]);
+            cout << "sub: " << sub_n << " worker: " << worker_n << endl;
             RpcServer rpc_server(ip, port);
             g_server = &rpc_server;
             rpc_server.start();

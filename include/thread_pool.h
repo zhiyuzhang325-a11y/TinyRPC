@@ -5,6 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <string>
 #include <sys/eventfd.h>
 #include <thread>
 #include <vector>
@@ -16,6 +17,8 @@ class ThreadPool {
     struct TaskResult {
         int fd;
         std::string response_data;
+
+        TaskResult(int f, std::string s) : fd(f), response_data(move(s)) {};
     };
 
     ThreadPool(int notify_fd, size_t n = 5);

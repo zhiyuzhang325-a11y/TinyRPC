@@ -68,7 +68,7 @@ string RpcStub::call(const string &method_name, string request_data) {
     string response;
     {
         size_t idx = m_next_key_idx.fetch_add(1) % m_keys.size();
-        cout << "idx=" << idx << " key=" << m_keys[idx] << endl;
+        // cout << "idx=" << idx << " key=" << m_keys[idx] << endl;
         ConnGuard conn_guard = conn_pool.getConnGuard(m_keys[idx]);
 
         int fd = conn_guard.getConnFd();
@@ -105,38 +105,32 @@ string RpcStub::call(const string &method_name, string request_data) {
     return response_data;
 }
 
-future<AddResponse> CalcService_Stub::add(AddRequest req) {
-    return async(launch::async, [this, req = move(req)] mutable {
-        string request_data;
-        req.SerializeToString(&request_data);
+AddResponse CalcService_Stub::add(AddRequest req) {
+    string request_data;
+    req.SerializeToString(&request_data);
 
-        string response_data = call("Add", move(request_data));
-        AddResponse resp;
-        resp.ParseFromString(response_data);
-        return resp;
-    });
+    string response_data = call("Add", move(request_data));
+    AddResponse resp;
+    resp.ParseFromString(response_data);
+    return resp;
 }
 
-future<SubtractResponse> CalcService_Stub::subtract(SubtractRequest req) {
-    return async(launch::async, [this, req = move(req)] mutable {
-        string request_data;
-        req.SerializeToString(&request_data);
+SubtractResponse CalcService_Stub::subtract(SubtractRequest req) {
+    string request_data;
+    req.SerializeToString(&request_data);
 
-        string response_data = call("Subtract", move(request_data));
-        SubtractResponse resp;
-        resp.ParseFromString(response_data);
-        return resp;
-    });
+    string response_data = call("Subtract", move(request_data));
+    SubtractResponse resp;
+    resp.ParseFromString(response_data);
+    return resp;
 }
 
-future<EchoResponse> EchoService_Stub::echo(EchoRequest req) {
-    return async(launch::async, [this, req = move(req)] mutable {
-        string request_data;
-        req.SerializeToString(&request_data);
+EchoResponse EchoService_Stub::echo(EchoRequest req) {
+    string request_data;
+    req.SerializeToString(&request_data);
 
-        string response_data = call("Echo", move(request_data));
-        EchoResponse resp;
-        resp.ParseFromString(response_data);
-        return resp;
-    });
+    string response_data = call("Echo", move(request_data));
+    EchoResponse resp;
+    resp.ParseFromString(response_data);
+    return resp;
 }

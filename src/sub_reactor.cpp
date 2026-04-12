@@ -19,7 +19,7 @@ static int eventfd_create() {
     return fd;
 }
 
-SubReactor::SubReactor(int i, std::shared_ptr<const HandlerMap> handlers) : m_idx(i), m_ready_notify_fd(eventfd_create()), m_handlers(handlers), m_thread_pool(m_ready_notify_fd) {
+SubReactor::SubReactor(int i, std::shared_ptr<const HandlerMap> handlers, int workers) : m_idx(i), m_ready_notify_fd(eventfd_create()), m_handlers(handlers), m_thread_pool(m_ready_notify_fd, workers) {
     m_epoll_fd = epoll_create(1);
     m_dispatch_notify_fd = eventfd_create();
     addfd(m_ready_notify_fd);

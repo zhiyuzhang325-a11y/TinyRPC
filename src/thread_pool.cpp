@@ -1,5 +1,6 @@
 #include "thread_pool.h"
 #include "task.h"
+#include <unistd.h>
 using namespace std;
 
 ThreadPool::ThreadPool(int notify_fd, size_t n) : m_notify_fd(notify_fd) {

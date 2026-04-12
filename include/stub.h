@@ -25,12 +25,12 @@ class RpcStub {
 class CalcService_Stub : public RpcStub {
   public:
     CalcService_Stub() : RpcStub("CalcService") {}
-    std::future<AddResponse> add(AddRequest req);
-    std::future<SubtractResponse> subtract(SubtractRequest req);
+    AddResponse add(AddRequest req);
+    SubtractResponse subtract(SubtractRequest req);
 };
 
 class EchoService_Stub : public RpcStub {
   public:
     EchoService_Stub() : RpcStub("EchoService") {}
-    std::future<EchoResponse> echo(EchoRequest req);
+    EchoResponse echo(EchoRequest req);
 };
