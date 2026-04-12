@@ -67,8 +67,12 @@ int main(int argc, char *argv[]) {
                 port = stoi(argv[2]);
             }
             cout << "RpcServer ip is " + ip + '/' << port << endl;
-            int sub_n = stoi(argv[3]);
-            int worker_n = stoi(argv[4]);
+            int sub_n;
+            int worker_n;
+            if (argc > 4) {
+                int sub_n = stoi(argv[3]);
+                int worker_n = stoi(argv[4]);
+            }
             cout << "sub: " << sub_n << " worker: " << worker_n << endl;
             RpcServer rpc_server(ip, port);
             g_server = &rpc_server;
